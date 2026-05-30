@@ -195,7 +195,7 @@ export function ClassicTemplate({ data }: Props) {
   };
 
   return (
-    <div className="bg-white w-full h-full p-10 font-sans text-[13px] leading-relaxed" style={{ minHeight: '297mm' }}>
+    <div data-template="classic" className="bg-white w-full h-full p-10 font-sans text-[13px] leading-relaxed" style={{ minHeight: '297mm' }}>
       {/* Header */}
       <div className="flex items-start gap-5 mb-8 pb-6 border-b" style={{ borderColor: accentColor }}>
         {personal.avatar && (

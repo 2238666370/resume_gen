@@ -44,7 +44,7 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
   <div id="print-toolbar">
     <div class="print-toolbar-left">
       <span class="print-toolbar-title">📄 简历打印预览</span>
-      <span class="print-toolbar-hint">💡 打印时请选择「<b>另存为 PDF</b>」，导出的 PDF 支持中文搜索和复制</span>
+      <span class="print-toolbar-hint">💡 打印时请选择「<b>另存为 PDF</b>」，页边距建议选择「<b>无</b>」</span>
     </div>
     <div class="print-toolbar-actions">
       <button id="btn-print" class="print-btn print-btn-primary">
@@ -155,12 +155,8 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
       transform-origin: center center;
     }
 
-    /* ---- 打印样式 ---- */
+    /* ---- 打印样式（模板无关的通则） ---- */
     @media print {
-      @page {
-        size: A4;
-        margin: 10mm 12mm;
-      }
       html, body {
         margin: 0 !important; padding: 0 !important;
         background: white !important;
@@ -185,23 +181,6 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
         height: auto !important;
         transform: none !important;
       }
-      /* 覆盖 Tailwind padding 工具类 —— 让内容贴边 */
-      .p-10, .p-8, .p-6, .p-5, .p-4 {
-        padding: 0 !important;
-      }
-      .px-10, .px-8, .px-6, .px-5, .px-4 {
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-      }
-      .py-10, .py-8, .py-6, .py-5, .py-4 {
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
-      }
-      /* 去掉 min-h 类导致的多余空白页 */
-      .min-h-screen, .min-h-full, div[style*="min-height: 297mm"] {
-        min-height: auto !important;
-        height: auto !important;
-      }
       * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
@@ -218,6 +197,34 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
   clone.style.margin = '0';
   const contentArea = doc.getElementById('print-content')!;
   contentArea.appendChild(clone);
+
+  // 5.1 根据模板类型注入差异化打印规则
+  const template = clone.dataset.template || 'classic';
+
+  const pageMargins: Record<string, string> = {
+    classic: '10mm 12mm',  // 保持现状
+    modern:  '0',           // 贴边无空隙
+    minimal: '6mm 8mm',    // 减小空隙
+  };
+
+  // 各模板的根容器 padding 处理策略
+  // Classic/Minimal 根元素有 padding（p-10 / p-12），打印时剥离由 @page 控制边距
+  // Modern 根元素无 padding，内部 p-8 属于设计排版，打印时保留
+  const rootPadStripping = (template === 'modern')
+    ? ''  // 现代模板保留内部排版 padding
+    : '#print-content > div { padding: 0 !important; }';
+
+  const templatePrintCSS = doc.createElement('style');
+  templatePrintCSS.textContent = `
+    @media print {
+      @page {
+        size: A4;
+        margin: ${pageMargins[template] || pageMargins.classic};
+      }
+      ${rootPadStripping}
+    }
+  `;
+  doc.head.appendChild(templatePrintCSS);
 
   // 5.5 计算缩放比例，让整份简历在预览区域完整显示（不滚动）
   const scaleResume = () => {

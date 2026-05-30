@@ -143,7 +143,7 @@ export function ModernTemplate({ data }: Props) {
   };
 
   return (
-    <div className="bg-white w-full h-full font-sans text-[13px]" style={{ minHeight: '297mm' }}>
+    <div data-template="modern" className="bg-white w-full h-full font-sans text-[13px]" style={{ minHeight: '297mm' }}>
       <div className="flex h-full">
         {/* Sidebar */}
         <div className="w-64 flex-shrink-0 p-8 text-white" style={{ backgroundColor: accentColor, minHeight: '297mm' }}>

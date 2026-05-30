@@ -164,7 +164,7 @@ export function MinimalTemplate({ data }: Props) {
   const rightTypes = ['education', 'skills', 'languages', 'certificates'];
 
   return (
-    <div className="bg-white w-full h-full p-12 font-sans text-[13px] leading-relaxed" style={{ minHeight: '297mm' }}>
+    <div data-template="minimal" className="bg-white w-full h-full p-12 font-sans text-[13px] leading-relaxed" style={{ minHeight: '297mm' }}>
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-end justify-between">
