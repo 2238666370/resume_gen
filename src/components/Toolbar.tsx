@@ -33,9 +33,13 @@ export function Toolbar({ resumeRef }: Props) {
     }
     setExporting(type);
     try {
-      if (type === 'pdf') await exportToPDF(resumeRef.current, data.personal.name || 'resume');
-      else await exportToPNG(resumeRef.current, data.personal.name || 'resume');
-      showToast(`✓ ${type === 'pdf' ? 'PDF' : '图片'} 已导出，查看浏览器下载`, '#22c55e');
+      if (type === 'pdf') {
+        await exportToPDF(resumeRef.current, data.personal.name || 'resume');
+        showToast('📄 在打印对话框中选择「另存为 PDF」即可导出，支持搜索和复制', '#3b82f6', 4000);
+      } else {
+        await exportToPNG(resumeRef.current, data.personal.name || 'resume');
+        showToast('✓ 图片已导出，查看浏览器下载', '#22c55e');
+      }
     } catch (err: any) {
       console.error('导出失败:', err);
       showToast(`导出失败: ${err.message || '未知错误，请检查浏览器控制台'}`, '#ef4444');
@@ -68,12 +72,12 @@ export function Toolbar({ resumeRef }: Props) {
     }
   };
 
-  const showToast = (text: string, bg = '#22c55e') => {
+  const showToast = (text: string, bg = '#22c55e', duration = 2000) => {
     const toast = document.createElement('div');
     toast.textContent = text;
     toast.style.cssText = `position:fixed;top:20px;left:50%;transform:translateX(-50%);background:${bg};color:white;padding:8px 20px;border-radius:8px;font-size:14px;z-index:9999;pointer-events:none;`;
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 2000);
+    setTimeout(() => toast.remove(), duration);
   };
 
   return (

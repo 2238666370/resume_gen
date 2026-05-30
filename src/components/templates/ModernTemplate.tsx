@@ -5,22 +5,6 @@ interface Props {
   data: ResumeData;
 }
 
-const SkillTag = ({ name, level, color }: { name: string; level: number; color: string }) => {
-  const opacity = 0.2 + (level / 5) * 0.8;
-  return (
-    <span
-      className="px-2.5 py-1 rounded-full text-xs font-medium"
-      style={{
-        backgroundColor: color + '22',
-        color,
-        border: `1px solid ${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')}`,
-      }}
-    >
-      {name}
-    </span>
-  );
-};
-
 export function ModernTemplate({ data }: Props) {
   const {
     personal, education, experience, internship, skills, projects,
