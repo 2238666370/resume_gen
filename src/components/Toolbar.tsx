@@ -2,6 +2,9 @@ import { useRef, useState } from 'react';
 import { useResumeStore } from '../store/resumeStore';
 import { exportToPDF, exportToPNG, exportJSON, parseResumeJSON } from '../utils/export';
 
+const isElectron = (): boolean =>
+  typeof window !== 'undefined' && !!window.electron;
+
 const TEMPLATES: { id: 'classic' | 'modern' | 'minimal'; name: string; desc: string }[] = [
   { id: 'classic', name: '经典', desc: '传统横版，简洁专业' },
   { id: 'modern', name: '现代', desc: '侧边栏布局，时尚个性' },
@@ -35,7 +38,9 @@ export function Toolbar({ resumeRef }: Props) {
     try {
       if (type === 'pdf') {
         await exportToPDF(resumeRef.current, data.personal.name || 'resume');
-        showToast('📄 在打印对话框中选择「另存为 PDF」即可导出，支持搜索和复制', '#3b82f6', 4000);
+        if (!isElectron()) {
+          showToast('📄 在打印对话框中选择「另存为 PDF」即可导出，支持搜索和复制', '#3b82f6', 4000);
+        }
       } else {
         await exportToPNG(resumeRef.current, data.personal.name || 'resume');
         showToast('✓ 图片已导出，查看浏览器下载', '#22c55e');

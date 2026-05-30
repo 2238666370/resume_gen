@@ -1,6 +1,90 @@
 import html2canvas from 'html2canvas';
 import type { ResumeData } from '../types/resume';
 
+// ─── 判断是否在 Electron 环境 ───
+const isElectron = (): boolean =>
+  typeof window !== 'undefined' && !!window.electron;
+
+// ─── 收集页面所有 CSS（用于 Electron PDF 导出） ───
+function collectAllCSS(): string {
+  let css = '';
+
+  // 1. 内联 <style> 标签
+  document.querySelectorAll('style').forEach((s) => {
+    css += s.textContent + '\n';
+  });
+
+  // 2. 通过 CSSOM 收集所有样式表规则（涵盖 Tailwind 等）
+  for (const sheet of document.styleSheets) {
+    try {
+      for (const rule of sheet.cssRules) {
+        css += rule.cssText + '\n';
+      }
+    } catch {
+      // 跨域样式表无法读取，跳过
+    }
+  }
+
+  return css;
+}
+
+// ─── 构建完整 HTML（含内联 CSS + 简历 DOM） ───
+function buildFullHTML(element: HTMLElement): string {
+  const allCSS = collectAllCSS();
+
+  // 克隆简历 DOM
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.removeAttribute('id');
+  clone.style.boxShadow = 'none';
+  clone.style.borderRadius = '0';
+  clone.style.margin = '0';
+  // 去掉缩放变换
+  clone.style.transform = 'none';
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>简历</title>
+  <style>
+    /* ── 全局 reset ── */
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+                   'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── 应用原有所有样式 ── */
+    ${allCSS}
+
+    /* ── 打印专用（Electron printToPDF，页边距由主进程控制为 0） ── */
+    @media print {
+      @page {
+        size: A4;
+        margin: 0;
+      }
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+      }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root-print">${clone.outerHTML}</div>
+</body>
+</html>`;
+}
+
+// ─── 导出 PNG（不变） ───
+
 export async function exportToPNG(element: HTMLElement, filename = 'resume') {
   const canvas = await html2canvas(element, {
     scale: 2,
@@ -14,14 +98,49 @@ export async function exportToPNG(element: HTMLElement, filename = 'resume') {
   link.click();
 }
 
+// ─── 导出 PDF ───
+
 /**
- * 导出 PDF —— 使用浏览器原生打印功能
- *
- * 流程：简历 DOM 克隆到全屏 iframe → 顶部显示「打印」和「返回」按钮 →
- * 用户点击「打印」弹出浏览器打印对话框 → 另存为 PDF。
- * 浏览器原生渲染引擎完美处理中文字体，生成的 PDF 支持文字搜索、复制。
+ * Electron 环境：直接调用主进程 printToPDF，弹出保存对话框
+ * 浏览器环境：iframe 预览 + 浏览器原生打印（兼容旧逻辑）
  */
 export async function exportToPDF(element: HTMLElement, filename = 'resume') {
+  if (isElectron()) {
+    return exportToPDF_Electron(element, filename);
+  }
+  return exportToPDF_Browser(element, filename);
+}
+
+/** Electron：收集样式 + 构建 HTML → IPC → 主进程 printToPDF + 保存对话框 */
+async function exportToPDF_Electron(
+  element: HTMLElement,
+  filename: string,
+): Promise<void> {
+  const html = buildFullHTML(element);
+
+  const result = await window.electron!.invoke('export-pdf', {
+    html,
+    defaultName: filename,
+  });
+
+  if (result && typeof result === 'object') {
+    const r = result as { success?: boolean; canceled?: boolean; filePath?: string };
+    if (r.canceled) {
+      return; // 用户取消保存
+    }
+    if (r.success) {
+      showToast('✓ PDF 已导出', '#22c55e');
+    } else {
+      showToast('导出失败，请重试', '#ef4444');
+    }
+  }
+}
+
+/** 浏览器：使用原生打印 → iframe 预览 */
+async function exportToPDF_Browser(
+  element: HTMLElement,
+  filename: string,
+): Promise<void> {
   // 1. 创建全屏 iframe 作为预览 + 打印容器
   const iframe = document.createElement('iframe');
   iframe.style.cssText =
@@ -62,7 +181,7 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
 </html>`);
   doc.close();
 
-  // 3. 复制父文档中的所有样式（Vite 开发模式注入 <style>，生产模式用 <link>）
+  // 3. 复制父文档中的所有样式
   const parentStyles = document.querySelectorAll('style');
   parentStyles.forEach((s) => doc.head.appendChild(s.cloneNode(true)));
 
@@ -138,7 +257,7 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
     }
     .print-btn-secondary:hover { background: #e5e7eb; }
 
-    /* ---- 简历内容区域（缩放以完整显示，不滚动） ---- */
+    /* ---- 简历内容区域（缩放以完整显示） ---- */
     #print-content {
       flex: 1;
       overflow: hidden;
@@ -171,7 +290,6 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
         align-items: unset !important;
         justify-content: unset !important;
       }
-      /* 简历容器：去掉阴影/圆角/缩放，宽高自适应纸张 */
       #print-content > div {
         box-shadow: none !important;
         border-radius: 0 !important;
@@ -202,16 +320,13 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
   const template = clone.dataset.template || 'classic';
 
   const pageMargins: Record<string, string> = {
-    classic: '10mm 12mm',  // 保持现状
-    modern:  '0',           // 贴边无空隙
-    minimal: '6mm 8mm',    // 减小空隙
+    classic: '10mm 12mm',
+    modern:  '0',
+    minimal: '6mm 8mm',
   };
 
-  // 各模板的根容器 padding 处理策略
-  // Classic/Minimal 根元素有 padding（p-10 / p-12），打印时剥离由 @page 控制边距
-  // Modern 根元素无 padding，内部 p-8 属于设计排版，打印时保留
   const rootPadStripping = (template === 'modern')
-    ? ''  // 现代模板保留内部排版 padding
+    ? ''
     : '#print-content > div { padding: 0 !important; }';
 
   const templatePrintCSS = doc.createElement('style');
@@ -226,24 +341,21 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
   `;
   doc.head.appendChild(templatePrintCSS);
 
-  // 5.5 计算缩放比例，让整份简历在预览区域完整显示（不滚动）
+  // 5.5 计算缩放比例
   const scaleResume = () => {
     const cw = contentArea.clientWidth;
     const ch = contentArea.clientHeight;
     if (cw <= 0 || ch <= 0) return;
-    // 简历原始尺寸：210mm × 297mm（不含本身的 padding）
-    const resumeW = clone.offsetWidth || 210 * 3.78;  // mm→px 近似
+    const resumeW = clone.offsetWidth || 210 * 3.78;
     const resumeH = clone.offsetHeight || 297 * 3.78;
-    const padX = 32; // 保留水平边距
-    const padY = 32; // 保留垂直边距
+    const padX = 32;
+    const padY = 32;
     const sx = (cw - padX) / resumeW;
     const sy = (ch - padY) / resumeH;
-    const s = Math.min(sx, sy, 1); // 放大不超过 1
+    const s = Math.min(sx, sy, 1);
     (clone as HTMLElement).style.transform = `scale(${s})`;
   };
-  // 先粗略缩放一次
   scaleResume();
-  // 绑定 resize，窗口变化时重新计算
   win.addEventListener('resize', scaleResume);
 
   // 6. 绑定按钮事件
@@ -260,9 +372,7 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
 
   doc.getElementById('btn-return')!.addEventListener('click', cleanup);
 
-  // 打印完成后也清理
   win.addEventListener('afterprint', cleanup, { once: true });
-  // 超时兜底清理（3分钟）
   setTimeout(cleanup, 180_000);
 
   // 7. 等待字体和图片加载完毕
@@ -291,11 +401,21 @@ export async function exportToPDF(element: HTMLElement, filename = 'resume') {
     );
   }
 
-  // 8. 聚焦 iframe，让用户看到预览
   win.focus();
 }
 
-/** 导出简历数据为 JSON 文件并触发下载 */
+// ─── Toast 提示 ───
+
+function showToast(text: string, bg = '#22c55e', duration = 2000) {
+  const toast = document.createElement('div');
+  toast.textContent = text;
+  toast.style.cssText = `position:fixed;top:20px;left:50%;transform:translateX(-50%);background:${bg};color:white;padding:8px 20px;border-radius:8px;font-size:14px;z-index:9999;pointer-events:none;`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), duration);
+}
+
+// ─── JSON 导出/导入（不变） ───
+
 export function exportJSON(data: ResumeData, filename = 'resume') {
   const safeName = filename.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_');
   const json = JSON.stringify(data, null, 2);
@@ -308,7 +428,6 @@ export function exportJSON(data: ResumeData, filename = 'resume') {
   URL.revokeObjectURL(url);
 }
 
-/** 从 File 读取 JSON 并返回 ResumeData，失败时抛出错误 */
 export function parseResumeJSON(file: File): Promise<ResumeData> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

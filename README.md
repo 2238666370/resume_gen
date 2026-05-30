@@ -6,22 +6,22 @@
 
 ## 快速启动
 
-### 环境要求
+### 方式一：桌面应用（推荐）
 
-| 工具 | 版本要求 |
-|------|---------|
-| Node.js | ≥ 18.x（推荐 18–22） |
-| npm | ≥ 8.x |
+直接双击 `release/win-unpacked/简历生成器.exe` 即可运行，无需安装 Node.js。
 
-> ⚠️ 本项目使用 Vite 5，不支持 Node.js 23+，建议使用 Node 22.x 及以下。
+### 方式二：双击 bat（浏览器）
 
-### 安装与运行
+1. 确保已安装 **Node.js**（≥18.x，推荐 22.x）
+2. 双击 `start.bat` → 自动打开浏览器
+
+### 方式三：开发模式
 
 ```bash
 # 1. 进入项目目录
-cd {dowmload}/resume_gen
+cd resume_gen
 
-# 2. 安装依赖（首次需要）
+# 2. 安装依赖
 npm install
 
 # 3. 启动开发服务器
@@ -29,6 +29,13 @@ npm run dev
 ```
 
 启动成功后访问：**http://localhost:5173**
+
+### 打包桌面应用
+
+```bash
+npm run electron:build    # 构建 dist + 打包为 .exe（产物在 release/）
+npm run electron:dev      # Electron 开发模式（热重载需手动刷新）
+```
 
 ### 其他命令
 
@@ -105,9 +112,11 @@ npm run lint     # ESLint 代码检查
 | 格式 | 说明 |
 |------|------|
 | 导出图片（PNG） | 高清 2× 分辨率，适合截图分享 |
-| 导出 PDF | 浏览器原生打印，真实文字型 PDF，中文可复制、可搜索 |
+| 导出 PDF | 文字型 PDF，中文可复制、可搜索，页边距为零 |
 
-> **PDF 导出机制**：点击「导出 PDF」后，浏览器会弹出打印对话框，选择「另存为 PDF」即可保存。由于使用浏览器原生渲染引擎，所有系统字体（包括中文 PingFang SC / Microsoft YaHei 等）均可完美呈现，生成的 PDF 支持文字搜索和复制粘贴。
+> **PDF 导出机制**：
+> - **桌面应用**：通过 Electron 主进程 `printToPDF` 直接生成，弹出保存对话框，无需额外操作
+> - **浏览器**：弹出打印对话框，选择「另存为 PDF」即可保存。由于使用浏览器原生渲染引擎，所有系统字体（包括中文 PingFang SC / Microsoft YaHei 等）均可完美呈现，生成的 PDF 支持文字搜索和复制粘贴。
 >
 > 点击顶部工具栏对应按钮即可，导出过程约 1–3 秒。
 
@@ -133,7 +142,8 @@ npm run lint     # ESLint 代码检查
 resume_gen/
 ├── src/
 │   ├── types/
-│   │   └── resume.ts          # 全局 TypeScript 类型定义
+│   │   ├── resume.ts          # 全局 TypeScript 类型定义
+│   │   └── electron.d.ts      # window.electron IPC 桥接类型声明
 │   ├── store/
 │   │   └── resumeStore.ts     # Zustand 全局状态 + CRUD 操作
 │   ├── components/
@@ -159,6 +169,8 @@ resume_gen/
 │   ├── App.tsx                # 根组件，整体三栏布局
 │   ├── main.tsx               # React 入口
 │   └── index.css              # Tailwind 基础样式引入
+├── main.cjs                   # Electron 主进程（窗口 + IPC handler）
+├── preload.cjs                # Electron preload（安全 IPC 桥接）
 ├── tailwind.config.js         # Tailwind v3 配置
 ├── postcss.config.js          # PostCSS 配置
 ├── vite.config.ts             # Vite 5 构建配置
@@ -176,7 +188,9 @@ resume_gen/
 | Zustand | 5 | 轻量全局状态管理（含 persist） |
 | @dnd-kit | 6/10 | 无障碍可访问的拖拽排序 |
 | html2canvas | 1.4 | DOM → Canvas 截图（PNG 导出） |
-| 浏览器原生打印 | - | 文字型 PDF 导出（支持中文搜索/复制） |
+| Electron | 34 | 桌面应用框架（exe 打包） |
+| electron-builder | 26 | Electron 打包工具 |
+| 浏览器原生打印 | - | 浏览器环境文字型 PDF 导出 |
 
 ### 数据流
 
@@ -189,7 +203,8 @@ resume_gen/
   三套模板组件读取 store 数据实时渲染
       ↓
   导出 PNG：html2canvas 截图 → 下载
-  导出 PDF：DOM 克隆到 iframe → 浏览器打印 → 另存为 PDF
+  导出 PDF（Electron）：收集 CSS + DOM → IPC → 主进程 printToPDF → 保存对话框
+  导出 PDF（浏览器）：DOM 克隆到 iframe → 浏览器打印 → 另存为 PDF
 ```
 
 ### 状态结构（ResumeData）
