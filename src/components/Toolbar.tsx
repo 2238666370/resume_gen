@@ -94,7 +94,7 @@ export function Toolbar({ resumeRef }: Props) {
       {/* Logo */}
       <div className="flex items-center gap-2 mr-2">
         <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">R</div>
-        <span className="font-semibold text-gray-800 text-sm">简历生成器</span>
+        <span className="font-semibold text-gray-800 text-sm">简历生成器v1.0</span>
       </div>
 
       <div className="w-px h-6 bg-gray-200" />
