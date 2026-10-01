@@ -1,4 +1,4 @@
-export type TemplateId = 'classic' | 'modern' | 'minimal';
+export type TemplateId = string;
 
 export interface PersonalInfo {
   name: string;
@@ -93,6 +93,7 @@ export interface ResumeSection {
 }
 
 export interface ResumeData {
+  title: string;
   templateId: TemplateId;
   accentColor: string;
   personal: PersonalInfo;

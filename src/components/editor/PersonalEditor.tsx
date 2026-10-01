@@ -1,4 +1,5 @@
 import { useResumeStore } from '../../store/resumeStore';
+import { AiTextActions } from '../AiTextActions';
 
 export function PersonalEditor() {
   const { data, updatePersonal } = useResumeStore();
@@ -48,6 +49,7 @@ export function PersonalEditor() {
           placeholder="简短介绍自己的背景、技能与目标..."
           onChange={(e) => updatePersonal({ summary: e.target.value })}
         />
+        <AiTextActions text={personal.summary || ''} section="personal.summary" onApply={(v) => updatePersonal({ summary: v })} />
       </div>
     </div>
   );

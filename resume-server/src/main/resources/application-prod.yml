@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:mysql://prod-db-host:3306/resume_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: 6379
+      password: ${REDIS_PASSWORD}
+
+resume:
+  storage:
+    type: mysql
+  cache:
+    type: redis
+
+jwt:
+  secret: ${JWT_SECRET}

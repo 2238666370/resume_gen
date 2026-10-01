@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import type {
   ResumeData,
   TemplateId,
@@ -27,6 +26,7 @@ const defaultSections: ResumeSection[] = [
 ];
 
 const defaultData: ResumeData = {
+  title: '未命名简历',
   templateId: 'classic',
   accentColor: '#2563eb',
   personal: {
@@ -89,9 +89,8 @@ const newExp = (): ExperienceItem => ({
 });
 
 export const useResumeStore = create<ResumeStore>()(
-  persist(
-    (set) => ({
-      data: defaultData,
+  (set) => ({
+    data: defaultData,
 
       setTemplate:    (id)    => set((s) => ({ data: { ...s.data, templateId: id } })),
       setAccentColor: (color) => set((s) => ({ data: { ...s.data, accentColor: color } })),
@@ -216,7 +215,5 @@ export const useResumeStore = create<ResumeStore>()(
       })),
       resetData: () => set({ data: defaultData }),
       loadData: (data) => set({ data }),
-    }),
-    { name: 'resume-data' }
-  )
+  })
 );

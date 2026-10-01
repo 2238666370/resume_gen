@@ -1,89 +1,9 @@
 import html2canvas from 'html2canvas';
 import type { ResumeData } from '../types/resume';
+import { getWatermarkConfig } from '../api/watermark';
+import type { WatermarkConfig } from '../api/watermark';
 
-// ─── 判断是否在 Electron 环境 ───
-const isElectron = (): boolean =>
-  typeof window !== 'undefined' && !!window.electron;
-
-// ─── 收集页面所有 CSS（用于 Electron PDF 导出） ───
-function collectAllCSS(): string {
-  let css = '';
-
-  // 1. 内联 <style> 标签
-  document.querySelectorAll('style').forEach((s) => {
-    css += s.textContent + '\n';
-  });
-
-  // 2. 通过 CSSOM 收集所有样式表规则（涵盖 Tailwind 等）
-  for (const sheet of document.styleSheets) {
-    try {
-      for (const rule of sheet.cssRules) {
-        css += rule.cssText + '\n';
-      }
-    } catch {
-      // 跨域样式表无法读取，跳过
-    }
-  }
-
-  return css;
-}
-
-// ─── 构建完整 HTML（含内联 CSS + 简历 DOM） ───
-function buildFullHTML(element: HTMLElement): string {
-  const allCSS = collectAllCSS();
-
-  // 克隆简历 DOM
-  const clone = element.cloneNode(true) as HTMLElement;
-  clone.removeAttribute('id');
-  clone.style.boxShadow = 'none';
-  clone.style.borderRadius = '0';
-  clone.style.margin = '0';
-  // 去掉缩放变换
-  clone.style.transform = 'none';
-
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <title>简历</title>
-  <style>
-    /* ── 全局 reset ── */
-    *, *::before, *::after { box-sizing: border-box; }
-    body {
-      margin: 0; padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-                   'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* ── 应用原有所有样式 ── */
-    ${allCSS}
-
-    /* ── 打印专用（Electron printToPDF，页边距由主进程控制为 0） ── */
-    @media print {
-      @page {
-        size: A4;
-        margin: 0;
-      }
-      body {
-        margin: 0 !important;
-        padding: 0 !important;
-        background: white !important;
-      }
-      * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div id="root-print">${clone.outerHTML}</div>
-</body>
-</html>`;
-}
-
-// ─── 导出 PNG（不变） ───
+// ─── 导出 PNG ───
 
 export async function exportToPNG(element: HTMLElement, filename = 'resume') {
   const canvas = await html2canvas(element, {
@@ -92,52 +12,100 @@ export async function exportToPNG(element: HTMLElement, filename = 'resume') {
     backgroundColor: '#ffffff',
     logging: false,
   });
+  try {
+    const wm = await getWatermarkConfig();
+    applyWatermarks(canvas, wm);
+  } catch {
+    // 获取水印配置失败（如未登录）时静默降级，不影响导出
+  }
   const link = document.createElement('a');
   link.download = `${filename}.png`;
   link.href = canvas.toDataURL('image/png');
   link.click();
 }
 
-// ─── 导出 PDF ───
+// ─── 水印（R8-E） ───
+
+/** 叠加可视水印与盲水印（先画可视，再编码盲水印，避免文本覆盖破坏 LSB）。 */
+function applyWatermarks(canvas: HTMLCanvasElement, wm: WatermarkConfig | undefined): void {
+  if (!wm || !wm.enabled) return;
+  if (wm.visibleText) {
+    drawVisibleWatermark(canvas, wm.visibleText, wm.visibleOpacity, wm.visibleDensity);
+  }
+  if (wm.blindEnabled && wm.blindPayload) {
+    encodeLsbWatermark(canvas, wm.blindPayload);
+  }
+}
+
+/** 可视水印：半透明重复文本，威慑截屏转发。 */
+function drawVisibleWatermark(
+  canvas: HTMLCanvasElement,
+  text: string,
+  opacity: number,
+  density: string,
+): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const step = density === 'heavy' ? 80 : density === 'light' ? 240 : 160;
+  ctx.save();
+  ctx.globalAlpha = Math.min(Math.max(opacity, 0.01), 1);
+  ctx.fillStyle = '#000';
+  ctx.font = '16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let y = 0; y < h + 200; y += step) {
+    for (let x = -h; x < w + 200; x += step) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-Math.PI / 6);
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+}
 
 /**
- * Electron 环境：直接调用主进程 printToPDF，弹出保存对话框
- * 浏览器环境：iframe 预览 + 浏览器原生打印（兼容旧逻辑）
+ * 盲水印：将负载按「MAGIC(RWMW) + 2 字节长度 + payload」写入像素红通道 LSB，
+ * 与后端 WatermarkService.decodeLsb 协议一致，肉眼不可见，可溯源。
  */
-export async function exportToPDF(element: HTMLElement, filename = 'resume') {
-  if (isElectron()) {
-    return exportToPDF_Electron(element, filename);
+function encodeLsbWatermark(canvas: HTMLCanvasElement, payload: string): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const payloadBytes = new TextEncoder().encode(payload);
+  if (payloadBytes.length > 512) return;
+  const full = new Uint8Array(6 + payloadBytes.length);
+  full[0] = 0x52; // R
+  full[1] = 0x57; // W
+  full[2] = 0x4d; // M
+  full[3] = 0x57; // W
+  full[4] = (payloadBytes.length >> 8) & 0xff;
+  full[5] = payloadBytes.length & 0xff;
+  full.set(payloadBytes, 6);
+
+  const totalBits = full.length * 8;
+  if (w * h < totalBits) return; // 像素不足以承载水印
+
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const data = imageData.data;
+  for (let i = 0; i < totalBits; i++) {
+    const bit = (full[Math.floor(i / 8)] >> (7 - (i % 8))) & 1;
+    const x = i % w;
+    const y = Math.floor(i / w);
+    const idx = (y * w + x) * 4; // R 通道
+    data[idx] = (data[idx] & 0xfe) | bit;
   }
-  return exportToPDF_Browser(element, filename);
+  ctx.putImageData(imageData, 0, 0);
 }
 
-/** Electron：收集样式 + 构建 HTML → IPC → 主进程 printToPDF + 保存对话框 */
-async function exportToPDF_Electron(
-  element: HTMLElement,
-  filename: string,
-): Promise<void> {
-  const html = buildFullHTML(element);
+// ─── 导出 PDF ───
 
-  const result = await window.electron!.invoke('export-pdf', {
-    html,
-    defaultName: filename,
-  });
-
-  if (result && typeof result === 'object') {
-    const r = result as { success?: boolean; canceled?: boolean; filePath?: string };
-    if (r.canceled) {
-      return; // 用户取消保存
-    }
-    if (r.success) {
-      showToast('✓ PDF 已导出', '#22c55e');
-    } else {
-      showToast('导出失败，请重试', '#ef4444');
-    }
-  }
-}
-
-/** 浏览器：使用原生打印 → iframe 预览 */
-async function exportToPDF_Browser(
+/** 导出 PDF：iframe 预览 + 浏览器原生打印（在打印对话框中选择「另存为 PDF」）。 */
+export async function exportToPDF(
   element: HTMLElement,
   filename: string,
 ): Promise<void> {
@@ -404,17 +372,7 @@ async function exportToPDF_Browser(
   win.focus();
 }
 
-// ─── Toast 提示 ───
-
-function showToast(text: string, bg = '#22c55e', duration = 2000) {
-  const toast = document.createElement('div');
-  toast.textContent = text;
-  toast.style.cssText = `position:fixed;top:20px;left:50%;transform:translateX(-50%);background:${bg};color:white;padding:8px 20px;border-radius:8px;font-size:14px;z-index:9999;pointer-events:none;`;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), duration);
-}
-
-// ─── JSON 导出/导入（不变） ───
+// ─── JSON 导出/导入 ───
 
 export function exportJSON(data: ResumeData, filename = 'resume') {
   const safeName = filename.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_');

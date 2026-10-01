@@ -1,5 +1,6 @@
 import { useResumeStore } from '../../store/resumeStore';
 import { BoldHint } from './BoldHint';
+import { AiTextActions } from '../AiTextActions';
 
 export function ProjectsEditor() {
   const { data, addProject, updateProject, removeProject } = useResumeStore();
@@ -77,6 +78,7 @@ export function ProjectsEditor() {
               onChange={(e) => updateProject(proj.id, { description: e.target.value })}
             />
             <BoldHint />
+            <AiTextActions text={proj.description} section="projects" onApply={(v) => updateProject(proj.id, { description: v })} />
           </div>
         </div>
       ))}

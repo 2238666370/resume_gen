@@ -1,15 +1,15 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useResumeStore } from '../store/resumeStore';
 import { exportToPDF, exportToPNG, exportJSON, parseResumeJSON } from '../utils/export';
-
-const isElectron = (): boolean =>
-  typeof window !== 'undefined' && !!window.electron;
-
-const TEMPLATES: { id: 'classic' | 'modern' | 'minimal'; name: string; desc: string }[] = [
-  { id: 'classic', name: '经典', desc: '传统横版，简洁专业' },
-  { id: 'modern', name: '现代', desc: '侧边栏布局，时尚个性' },
-  { id: 'minimal', name: '简约', desc: '极简双栏，干净清爽' },
-];
+import { ShareModal } from './ShareModal';
+import { AiSuggestModal } from './AiSuggestModal';
+import { AiImproveModal } from './AiImproveModal';
+import { AiScoreModal } from './AiScoreModal';
+import { ResumeHistoryModal } from './ResumeHistoryModal';
+import { DropdownMenu } from './ui/DropdownMenu';
+import { listTemplates } from '../api/templates';
+import type { TemplateVO } from '../api/types';
 
 const COLORS = [
   '#2563eb', '#7c3aed', '#db2777', '#dc2626',
@@ -20,14 +20,31 @@ interface Props {
   resumeRef: React.RefObject<HTMLDivElement | null>;
 }
 
+/**
+ * 编辑器工具栏（F1）：12 个平铺按钮收敛为「返回 / 样式 / 历史 / 分享 / AI / 文件 / 导出」7 个入口。
+ */
 export function Toolbar({ resumeRef }: Props) {
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
   const { data, setTemplate, setAccentColor, resetData, loadData } = useResumeStore();
   const [exporting, setExporting] = useState<'pdf' | 'png' | null>(null);
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [showColors, setShowColors] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [showAiSuggest, setShowAiSuggest] = useState(false);
+  const [showAiImprove, setShowAiImprove] = useState(false);
+  const [showAiScore, setShowAiScore] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [templates, setTemplates] = useState<TemplateVO[]>([]);
   const colorInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    listTemplates()
+      .then(setTemplates)
+      .catch(() => {
+        /* 模板拉取失败时静默降级为硬编码空列表，不影响编辑 */
+      });
+  }, []);
 
   const handleExport = async (type: 'pdf' | 'png') => {
     if (!resumeRef.current) {
@@ -38,9 +55,7 @@ export function Toolbar({ resumeRef }: Props) {
     try {
       if (type === 'pdf') {
         await exportToPDF(resumeRef.current, data.personal.name || 'resume');
-        if (!isElectron()) {
-          showToast('📄 在打印对话框中选择「另存为 PDF」即可导出，支持搜索和复制', '#3b82f6', 4000);
-        }
+        showToast('📄 在打印对话框中选择「另存为 PDF」即可导出，支持搜索和复制', '#3b82f6', 4000);
       } else {
         await exportToPNG(resumeRef.current, data.personal.name || 'resume');
         showToast('✓ 图片已导出，查看浏览器下载', '#22c55e');
@@ -96,170 +111,202 @@ export function Toolbar({ resumeRef }: Props) {
         onChange={handleFileChange}
       />
 
-      {/* Logo */}
-      <div className="flex items-center gap-2 mr-2">
-        <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">R</div>
-        <span className="font-semibold text-gray-800 text-sm">简历生成器v1.0</span>
-      </div>
+      {/* 左侧：返回 */}
+      <button
+        onClick={() => navigate('/')}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-md transition-colors shrink-0"
+        title="返回工作台"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/>
+        </svg>
+        返回
+      </button>
 
       <div className="w-px h-6 bg-gray-200" />
 
-      {/* Template Switcher */}
-      <div className="relative">
-        <button
-          onClick={() => { setShowTemplates(!showTemplates); setShowColors(false); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-        >
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">R</div>
+        <span className="font-semibold text-gray-800 text-sm hidden sm:inline">简历生成器</span>
+      </div>
+
+      <div className="w-px h-6 bg-gray-200 hidden sm:block" />
+
+      {/* 中部：结构区（样式 / 历史 / 分享） */}
+      <DropdownMenu
+        label={<span className="flex items-center gap-1.5">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
             <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
           </svg>
-          模板
-          <span className="text-xs text-blue-600 font-medium">
-            {TEMPLATES.find(t => t.id === data.templateId)?.name}
-          </span>
-        </button>
-        {showTemplates && (
-          <div className="absolute top-10 left-0 bg-white border border-gray-200 rounded-xl shadow-xl p-3 z-50 flex gap-3 w-72">
-            {TEMPLATES.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => { setTemplate(t.id); setShowTemplates(false); }}
-                className={`flex-1 rounded-lg border-2 p-2 text-center transition-all ${
-                  data.templateId === t.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="w-full aspect-[3/4] bg-gray-100 rounded mb-1.5 overflow-hidden flex flex-col p-1 gap-0.5">
-                  <div className="h-3 rounded" style={{ backgroundColor: t.id === 'modern' ? '#2563eb' : '#e5e7eb' }} />
-                  <div className="flex gap-0.5 flex-1">
-                    {t.id === 'modern' && <div className="w-5 rounded" style={{ backgroundColor: '#2563eb22' }} />}
-                    <div className="flex-1 flex flex-col gap-0.5 pt-0.5">
-                      <div className="h-1 bg-gray-200 rounded w-full" />
-                      <div className="h-1 bg-gray-200 rounded w-4/5" />
-                      <div className="h-1 bg-gray-200 rounded w-3/5 mt-0.5" />
-                      <div className="h-1 bg-gray-200 rounded w-full mt-0.5" />
-                      <div className="h-1 bg-gray-200 rounded w-4/5" />
-                    </div>
+          样式
+        </span>}
+        align="left"
+        panelClassName="p-3 w-72"
+      >
+        <div className="flex gap-3 mb-3">
+          {templates.map((t) => (
+            <button
+              key={t.code}
+              type="button"
+              onClick={() => setTemplate(t.code)}
+              className={`flex-1 rounded-lg border-2 p-2 text-center transition-all ${
+                data.templateId === t.code ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className="w-full aspect-[3/4] bg-gray-100 rounded mb-1.5 overflow-hidden flex flex-col p-1 gap-0.5">
+                <div className="h-3 rounded" style={{ backgroundColor: t.code === 'modern' ? '#2563eb' : '#e5e7eb' }} />
+                <div className="flex gap-0.5 flex-1">
+                  {t.code === 'modern' && <div className="w-5 rounded" style={{ backgroundColor: '#2563eb22' }} />}
+                  <div className="flex-1 flex flex-col gap-0.5 pt-0.5">
+                    <div className="h-1 bg-gray-200 rounded w-full" />
+                    <div className="h-1 bg-gray-200 rounded w-4/5" />
+                    <div className="h-1 bg-gray-200 rounded w-3/5 mt-0.5" />
+                    <div className="h-1 bg-gray-200 rounded w-full mt-0.5" />
+                    <div className="h-1 bg-gray-200 rounded w-4/5" />
                   </div>
                 </div>
-                <p className="text-xs font-medium text-gray-700">{t.name}</p>
-                <p className="text-[10px] text-gray-400">{t.desc}</p>
-              </button>
+              </div>
+              <p className="text-xs font-medium text-gray-700">{t.name}</p>
+              <p className="text-[10px] text-gray-400">{t.category}</p>
+            </button>
+          ))}
+        </div>
+
+        <div className="border-t border-gray-100 pt-3">
+          <p className="text-xs text-gray-500 mb-2">配色</p>
+          <div className="grid grid-cols-8 gap-2 mb-3">
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setAccentColor(c)}
+                className={`w-7 h-7 rounded-full transition-transform hover:scale-110 ${data.accentColor === c ? 'ring-2 ring-offset-2 ring-blue-500' : ''}`}
+                style={{ backgroundColor: c }}
+              />
             ))}
           </div>
-        )}
-      </div>
-
-      {/* Color Picker */}
-      <div className="relative">
-        <button
-          onClick={() => { setShowColors(!showColors); setShowTemplates(false); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-        >
-          <div className="w-4 h-4 rounded-full border border-gray-300" style={{ backgroundColor: data.accentColor }} />
-          配色
-        </button>
-        {showColors && (
-          <div className="absolute top-10 left-0 bg-white border border-gray-200 rounded-xl shadow-xl p-3 z-50 w-48">
-            <div className="grid grid-cols-4 gap-2 mb-3">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => { setAccentColor(c); setShowColors(false); }}
-                  className={`w-8 h-8 rounded-full transition-transform hover:scale-110 ${data.accentColor === c ? 'ring-2 ring-offset-2 ring-blue-500' : ''}`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500">自定义:</label>
-              <input
-                ref={colorInputRef}
-                type="color"
-                value={data.accentColor}
-                onChange={(e) => setAccentColor(e.target.value)}
-                className="w-8 h-8 rounded cursor-pointer border-0 p-0"
-              />
-              <span className="text-xs text-gray-400 font-mono">{data.accentColor}</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500">自定义:</label>
+            <input
+              ref={colorInputRef}
+              type="color"
+              value={data.accentColor}
+              onChange={(e) => setAccentColor(e.target.value)}
+              className="w-7 h-7 rounded cursor-pointer border-0 p-0"
+            />
+            <span className="text-xs text-gray-400 font-mono">{data.accentColor}</span>
           </div>
-        )}
-      </div>
+        </div>
+      </DropdownMenu>
+
+      <button
+        onClick={() => setShowHistory(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-md transition-colors shrink-0"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        历史
+      </button>
+
+      <button
+        onClick={() => setShowShare(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-md transition-colors shrink-0"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+          <line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/>
+        </svg>
+        分享
+      </button>
 
       <div className="flex-1" />
 
-      {/* Import JSON */}
-      <button
-        onClick={handleImport}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        导入
-      </button>
+      {/* 右侧：操作区（AI / 文件 / 导出） */}
+      <DropdownMenu
+        label={<span className="flex items-center gap-1.5">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/>
+          </svg>
+          AI
+        </span>}
+        items={[
+          { key: 'suggest', label: 'AI 建议', onClick: () => setShowAiSuggest(true) },
+          { key: 'score', label: 'AI 评分', onClick: () => setShowAiScore(true) },
+        ]}
+      />
 
-      {/* Save JSON */}
-      <button
-        onClick={handleSaveJSON}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
-          <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-        </svg>
-        保存
-      </button>
+      <DropdownMenu
+        label="文件"
+        items={[
+          { key: 'import', label: '导入 JSON', onClick: handleImport },
+          { key: 'save', label: '保存 JSON', onClick: handleSaveJSON },
+          { key: 'reset', label: '重置内容', onClick: () => setShowResetConfirm(true), danger: true },
+        ]}
+      />
 
-      {/* Reset */}
-      {showResetConfirm ? (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-red-500">确定清空所有内容？</span>
-          <button onClick={() => { resetData(); setShowResetConfirm(false); }} className="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 text-xs">确定</button>
-          <button onClick={() => setShowResetConfirm(false)} className="px-3 py-1 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 text-xs">取消</button>
+      <DropdownMenu
+        primary
+        disabled={!!exporting}
+        label={<span className="flex items-center gap-1.5">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          {exporting ? '导出中...' : '导出'}
+        </span>}
+        items={[
+          { key: 'png', label: '导出图片', onClick: () => handleExport('png'), disabled: !!exporting },
+          { key: 'pdf', label: '导出 PDF', onClick: () => handleExport('pdf'), disabled: !!exporting },
+        ]}
+      />
+
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowResetConfirm(false)}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-[360px] max-w-[92vw]" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm text-gray-800 mb-5">确定清空所有内容？该操作不可撤销。</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowResetConfirm(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md">取消</button>
+              <button
+                onClick={() => { resetData(); setShowResetConfirm(false); }}
+                className="px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600"
+              >
+                确定清空
+              </button>
+            </div>
+          </div>
         </div>
-      ) : (
-        <button
-          onClick={() => setShowResetConfirm(true)}
-          className="px-3 py-1.5 text-sm text-gray-400 hover:text-red-400 hover:bg-red-50 rounded-md transition-colors"
-        >
-          重置
-        </button>
       )}
 
-      {/* Export PNG */}
-      <button
-        onClick={() => handleExport('png')}
-        disabled={!!exporting}
-        className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors disabled:opacity-60"
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-          <polyline points="21 15 16 10 5 21"/>
-        </svg>
-        {exporting === 'png' ? '导出中...' : '导出图片'}
-      </button>
-
-      {/* Export PDF */}
-      <button
-        onClick={() => handleExport('pdf')}
-        disabled={!!exporting}
-        className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-60"
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/>
-          <line x1="9" y1="15" x2="15" y2="15"/>
-        </svg>
-        {exporting === 'pdf' ? '导出中...' : '导出 PDF'}
-      </button>
-
-      {/* Click outside to close */}
-      {(showTemplates || showColors) && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => { setShowTemplates(false); setShowColors(false); }}
+      {showShare && id && <ShareModal resumeId={id} onClose={() => setShowShare(false)} />}
+      {showAiSuggest && id && (
+        <AiSuggestModal
+          resumeId={id}
+          onClose={() => setShowAiSuggest(false)}
+          onImprove={() => {
+            setShowAiSuggest(false);
+            setShowAiImprove(true);
+          }}
+        />
+      )}
+      {showAiImprove && id && (
+        <AiImproveModal
+          resumeId={id}
+          currentData={data}
+          onClose={() => setShowAiImprove(false)}
+        />
+      )}
+      {showAiScore && id && (
+        <AiScoreModal
+          resumeId={id}
+          onClose={() => setShowAiScore(false)}
+        />
+      )}
+      {showHistory && id && (
+        <ResumeHistoryModal
+          resumeId={id}
+          onClose={() => setShowHistory(false)}
         />
       )}
     </header>

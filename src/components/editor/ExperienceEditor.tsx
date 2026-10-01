@@ -1,5 +1,6 @@
 import { useResumeStore } from '../../store/resumeStore';
 import { BoldHint } from './BoldHint';
+import { AiTextActions } from '../AiTextActions';
 
 export function ExperienceEditor() {
   const { data, addExperience, updateExperience, removeExperience } = useResumeStore();
@@ -79,6 +80,7 @@ export function ExperienceEditor() {
               onChange={(e) => updateExperience(exp.id, { description: e.target.value })}
             />
             <BoldHint />
+            <AiTextActions text={exp.description} section="experience" onApply={(v) => updateExperience(exp.id, { description: v })} />
           </div>
         </div>
       ))}
