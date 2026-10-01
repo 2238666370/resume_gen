@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { ResumeData } from '../../types/resume';
 import { fallbackLayout, parseSchema } from '../../types/schema';
 import type { TemplateLayout } from '../../types/schema';
+import { parseCanvasSchema } from '../../types/canvasSchema';
+import { CanvasTemplateRenderer } from '../canvas/CanvasTemplateRenderer';
 import { getTemplateSchema } from '../../api/templates';
 import { ClassicTemplate } from './ClassicTemplate';
 import { ModernTemplate } from './ModernTemplate';
@@ -35,6 +37,12 @@ export function ResumeTemplate({ data, schema }: Props) {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, schema]);
+
+  // Schema v2（自由画布）优先分派到画布渲染器（R8-A4）
+  const canvas = parseCanvasSchema(resolvedSchema);
+  if (canvas) {
+    return <CanvasTemplateRenderer data={data} schema={canvas} />;
+  }
 
   const parsed = parseSchema(resolvedSchema);
   const layout: TemplateLayout = parsed?.layout ?? fallbackLayout(code);

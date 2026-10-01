@@ -201,6 +201,10 @@ public class TemplateService {
     /** 创建用户自定义模板（type=user，草稿态）。 */
     @Transactional
     public TemplateVO createUserTemplate(Long userId, TemplateSaveRequest req) {
+        if (userId == null) {
+            // 兜底：写操作必须带登录用户，否则 owner 会落成 NULL，用户「保存后查不到」
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
         String schema = schemaValidator.validate(req.getSchema());
         Template t = new Template();
         t.setCode("u_" + userId + "_" + System.currentTimeMillis());
@@ -210,7 +214,7 @@ public class TemplateService {
         t.setSchema(schema);
         t.setOwnerUserId(userId);
         t.setVersion(0);
-        t.setSchemaVersion(1);
+        t.setSchemaVersion(schemaValidator.schemaVersionOf(schema));
         t.setUseCount(0L);
         t.setViewCount(0L);
         t.setSortOrder(0);
@@ -232,6 +236,7 @@ public class TemplateService {
                 .set(Template::getName, req.getName())
                 .set(Template::getCategory, req.getCategory())
                 .set(Template::getSchema, schema)
+                .set(Template::getSchemaVersion, schemaValidator.schemaVersionOf(schema))
                 .set(Template::getVersion, expected + 1));
         if (rows == 0) {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), "模板已被他人修改，请刷新后重试");

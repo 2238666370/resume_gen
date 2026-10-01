@@ -155,7 +155,7 @@ export function WorkbenchPage() {
             </>
           ) : tab === 'templates' ? (
             <button
-              onClick={() => navigate('/templates/builder')}
+              onClick={() => navigate('/templates/canvas')}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
             >
               + 新建模板

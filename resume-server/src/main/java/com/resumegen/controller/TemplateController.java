@@ -66,33 +66,33 @@ public class TemplateController {
 
     @GetMapping("/my")
     public ApiResponse<List<TemplateVO>> my() {
-        return ApiResponse.ok(templateService.myTemplates(UserContext.userId()));
+        return ApiResponse.ok(templateService.myTemplates(UserContext.requireUserId()));
     }
 
     @PostMapping
     public ApiResponse<TemplateVO> create(@Valid @RequestBody TemplateSaveRequest req) {
-        return ApiResponse.ok(templateService.createUserTemplate(UserContext.userId(), req));
+        return ApiResponse.ok(templateService.createUserTemplate(UserContext.requireUserId(), req));
     }
 
     @PutMapping("/{id}")
     public ApiResponse<TemplateVO> update(@PathVariable Long id,
                                           @Valid @RequestBody TemplateSaveRequest req) {
-        return ApiResponse.ok(templateService.updateUserTemplate(UserContext.userId(), id, req));
+        return ApiResponse.ok(templateService.updateUserTemplate(UserContext.requireUserId(), id, req));
     }
 
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id) {
-        templateService.deleteUserTemplate(UserContext.userId(), id);
+        templateService.deleteUserTemplate(UserContext.requireUserId(), id);
         return ApiResponse.ok();
     }
 
     @PostMapping("/{id}/publish")
     public ApiResponse<TemplateVO> publish(@PathVariable Long id) {
-        return ApiResponse.ok(templateService.publish(UserContext.userId(), id));
+        return ApiResponse.ok(templateService.publish(UserContext.requireUserId(), id));
     }
 
     @PostMapping("/{id}/use")
     public ApiResponse<TemplateVO> use(@PathVariable Long id) {
-        return ApiResponse.ok(templateService.useTemplate(UserContext.userId(), id));
+        return ApiResponse.ok(templateService.useTemplate(UserContext.requireUserId(), id));
     }
 }
