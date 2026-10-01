@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resumegen.common.BusinessException;
 import com.resumegen.common.PageResult;
 import com.resumegen.dto.TemplateCreateRequest;
+import com.resumegen.dto.TemplateSaveRequest;
 import com.resumegen.dto.TemplateUpdateRequest;
 import com.resumegen.dto.TemplateVO;
 import com.resumegen.entity.Template;
@@ -54,6 +55,39 @@ class TemplateServiceTest {
         r.setCode(code);
         r.setName("模板名");
         return r;
+    }
+
+    private static final String CANVAS_SCHEMA = """
+            {"schemaVersion":2,"layout":"canvas","page":{"width":210,"height":297,"unit":"mm",\
+            "margin":{"top":14,"right":14,"bottom":14,"left":14}},"elements":[]}""";
+
+    private TemplateSaveRequest saveReq(String schema) {
+        TemplateSaveRequest r = new TemplateSaveRequest();
+        r.setName("画布模板");
+        r.setSchema(schema);
+        return r;
+    }
+
+    /** 回归护栏：无登录用户时不允许创建，避免 owner 落成 NULL。 */
+    @Test
+    void createUserTemplateRejectsMissingUserId() {
+        assertThatThrownBy(() -> service.createUserTemplate(null, saveReq(CANVAS_SCHEMA)))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void createUserTemplateStoresOwnerAndParsesSchemaVersion() {
+        service.createUserTemplate(7L, saveReq(CANVAS_SCHEMA));
+
+        ArgumentCaptor<Template> captor = ArgumentCaptor.forClass(Template.class);
+        verify(templateMapper).insert(captor.capture());
+        Template saved = captor.getValue();
+
+        assertThat(saved.getOwnerUserId()).isEqualTo(7L);
+        assertThat(saved.getType()).isEqualTo("user");
+        assertThat(saved.getStatus()).isEqualTo(3);
+        assertThat(saved.getCode()).startsWith("u_7_");
+        assertThat(saved.getSchemaVersion()).isEqualTo(2); // 画布模板应为 v2
     }
 
     @Test

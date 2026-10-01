@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Modal, Space, Table, Tag, message } from 'antd';
 import { api } from '../api';
+import { SchemaPreview } from '../components/SchemaPreview';
 import type { TemplateItem } from '../types';
 
 const STATUS: Record<number, { text: string; color: string }> = {
@@ -16,6 +17,7 @@ export default function TemplatesPage() {
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
   const [loading, setLoading] = useState(false);
+  const [preview, setPreview] = useState<TemplateItem | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,9 +93,10 @@ export default function TemplatesPage() {
     },
     { title: '作者', dataIndex: 'ownerUserId', width: 90, render: (v?: string) => v ?? '-' },
     {
-      title: '操作', width: 220,
+      title: '操作', width: 280,
       render: (_: unknown, r: TemplateItem) => (
         <Space>
+          <Button size="small" onClick={() => setPreview(r)}>预览</Button>
           {r.status === 2 && <Button size="small" type="primary" onClick={() => audit(r.id, true)}>通过</Button>}
           {r.status === 2 && <Button size="small" danger onClick={() => audit(r.id, false)}>拒绝</Button>}
           {r.status === 1 && <Button size="small" onClick={() => setStatus(r.id, 0)}>下架</Button>}
@@ -119,6 +122,16 @@ export default function TemplatesPage() {
           onChange: (p, s) => { setPage(p); setSize(s); },
         }}
       />
+
+      <Modal
+        open={!!preview}
+        title={preview ? `模板预览 · ${preview.name}` : '模板预览'}
+        footer={null}
+        width={1040}
+        onCancel={() => setPreview(null)}
+      >
+        {preview && <SchemaPreview schema={preview.schema} />}
+      </Modal>
     </div>
   );
 }

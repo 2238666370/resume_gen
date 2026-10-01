@@ -24,13 +24,13 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // 注意：模板的「公开只读」不能在 excludePathPatterns 里排除
+        // （它按路径匹配、不区分方法，会连带放行 POST /api/templates），
+        // 改由 AuthInterceptor 内部按「仅 GET」判定，见 ANONYMOUS_GET_PATHS。
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/api/**", "/admin/**")
                 .excludePathPatterns("/api/auth/register", "/api/auth/login", "/api/auth/captcha",
-                        "/api/public/**",
-                        // 模板公开读取（匿名）；用户端写操作仍受拦截器保护
-                        "/api/templates", "/api/templates/detail/**",
-                        "/api/templates/market", "/api/templates/market/**");
+                        "/api/public/**");
     }
 
     @Override

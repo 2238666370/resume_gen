@@ -68,6 +68,9 @@ export interface TemplateItem {
   sortOrder: number;
   status: number;
   createdAt?: string | null;
+  /** 模板渲染 Schema（JSON 字符串），审核预览用。 */
+  schema?: string | null;
+  schemaVersion?: number;
 }
 
 export interface AdminPostItem {

@@ -79,7 +79,7 @@ export function MyTemplateList() {
                 </div>
                 <p className="text-xs text-gray-400 mt-2">使用 {t.useCount ?? 0} 次 · 浏览 {t.viewCount ?? 0} 次</p>
                 <div className="flex items-center gap-2 mt-4">
-                  <button onClick={() => navigate(`/templates/builder/${t.id}`)} className="px-3 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50">编辑</button>
+                  <button onClick={() => navigate(`/templates/canvas/${t.id}`)} className="px-3 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50">编辑</button>
                   {(t.status === 3 || t.status === 0) && (
                     <button onClick={() => handlePublish(t.id)} className="px-3 py-1.5 text-xs text-green-600 border border-green-200 rounded-md hover:bg-green-50">发布</button>
                   )}

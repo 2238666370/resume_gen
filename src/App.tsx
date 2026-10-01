@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
-import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { track, trackPublic } from './api/track';
 
@@ -12,7 +12,7 @@ const MePage = lazy(() => import('./pages/MePage').then((m) => ({ default: m.MeP
 const EditorPage = lazy(() => import('./pages/EditorPage').then((m) => ({ default: m.EditorPage })));
 const ShareViewPage = lazy(() => import('./pages/ShareViewPage').then((m) => ({ default: m.ShareViewPage })));
 const CommunityDetailPage = lazy(() => import('./pages/CommunityDetailPage').then((m) => ({ default: m.CommunityDetailPage })));
-const TemplateBuilderPage = lazy(() => import('./pages/TemplateBuilderPage').then((m) => ({ default: m.TemplateBuilderPage })));
+const CanvasBuilderPage = lazy(() => import('./pages/CanvasBuilderPage').then((m) => ({ default: m.CanvasBuilderPage })));
 const AppShell = lazy(() => import('./components/layout/AppShell').then((m) => ({ default: m.AppShell })));
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -33,12 +33,18 @@ const LEGACY_PATHS = new Set([
   '/templates/my',
 ]);
 
+/** 旧模板编辑器（结构化）已下线，统一重定向到画布设计器。 */
+function RedirectBuilder() {
+  const { id } = useParams<{ id?: string }>();
+  return <Navigate to={id ? `/templates/canvas/${id}` : '/templates/canvas'} replace />;
+}
+
 /** 路由切换时上报页面访问（PV/UV 埋点），按一级路径上报。 */
 function RouteTracker() {
   const location = useLocation();
   useEffect(() => {
     const p = location.pathname;
-    if (p === '/login' || LEGACY_PATHS.has(p)) return;
+    if (p === '/login' || LEGACY_PATHS.has(p) || p.startsWith('/templates/builder')) return;
     if (p.startsWith('/s/')) trackPublic(p);
     else track(p);
   }, [location.pathname]);
@@ -74,8 +80,10 @@ function App() {
           {/* 全屏专注页（不套外壳） */}
           <Route path="/editor/:id" element={<RequireAuth><EditorPage /></RequireAuth>} />
           <Route path="/community/:id" element={<CommunityDetailPage />} />
-          <Route path="/templates/builder" element={<RequireAuth><TemplateBuilderPage /></RequireAuth>} />
-          <Route path="/templates/builder/:id" element={<RequireAuth><TemplateBuilderPage /></RequireAuth>} />
+          <Route path="/templates/canvas" element={<RequireAuth><CanvasBuilderPage /></RequireAuth>} />
+          <Route path="/templates/canvas/:id" element={<RequireAuth><CanvasBuilderPage /></RequireAuth>} />
+          <Route path="/templates/builder" element={<RequireAuth><RedirectBuilder /></RequireAuth>} />
+          <Route path="/templates/builder/:id" element={<RequireAuth><RedirectBuilder /></RequireAuth>} />
 
           {/* 旧路由重定向（保持书签可用，落到正确 Tab） */}
           <Route path="/interview" element={<Navigate to="/ai" replace />} />
